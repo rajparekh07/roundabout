@@ -1,6 +1,6 @@
 {
   "name": "@rajparekh/roundabout",
-  "version": "0.1.1",
+  "version": "1.0.0",
   "description": "Local OpenAI-compatible LLM proxy",
   "main": "dist/src/index.js",
   "exports": {

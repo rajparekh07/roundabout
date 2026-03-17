@@ -1,10 +1,11 @@
 import { Command } from "commander";
 import { confirm, input, password, select } from "@inquirer/prompts";
 
-import { getConfigPath, loadConfig, saveConfig, summarizeProviders, upsertAlias, upsertProvider, upsertToken } from "./config.js";
+import { buildCliDependencies } from "./bootstrap/build-cli.js";
 import { createDebugLogger } from "./debug.js";
-import { createServer, startServer } from "./server.js";
+import { startServerWithDependencies } from "./server.js";
 import { generateToken } from "./token.js";
+import type { CliDependencies } from "./core/contracts.js";
 import type { AliasRoute, ProviderKind, RoundaboutConfig } from "./types.js";
 
 const PROVIDERS: Array<{ value: ProviderKind; label: string }> = [
@@ -19,18 +20,18 @@ export function createCli() {
   program
     .name("roundabout")
     .description("Local OpenAI-compatible LLM proxy")
-    .version("0.1.0");
+    .version("1.0.0");
 
   program
     .command("setup")
     .description("Run the initial setup wizard")
     .option("--config <path>", "Override config path")
     .action(async (options) => {
-      const configPath = options.config ?? getConfigPath();
-      const config = await loadConfig(configPath);
-      const updated = await runSetupWizard(config);
-      await saveConfig(updated, configPath);
-      console.log(`Wrote config to ${configPath}`);
+      const dependencies = await buildCliDependencies(options.config);
+      const config = await dependencies.configurationService.load();
+      const updated = await runSetupWizard(config, dependencies);
+      await dependencies.configurationService.save(updated);
+      console.log(`Wrote config to ${dependencies.configurationService.getPath()}`);
     });
 
   program
@@ -39,14 +40,18 @@ export function createCli() {
     .option("--config <path>", "Override config path")
     .option("--debug", "Log request and response bodies to stderr")
     .action(async (options) => {
-      const configPath = options.config ?? getConfigPath();
-      const config = await loadConfig(configPath);
+      const dependencies = await buildCliDependencies(options.config);
       const logger = createDebugLogger(Boolean(options.debug));
-      const app = await startServer(config, undefined, logger);
-      console.log(`roundabout listening on http://${config.daemon.host}:${config.daemon.port}`);
+      const serverDependencies = await dependencies.startDependencies(logger);
+      const app = await startServerWithDependencies(serverDependencies);
+
+      console.log(
+        `roundabout listening on http://${serverDependencies.config.daemon.host}:${serverDependencies.config.daemon.port}`
+      );
       if (options.debug) {
         console.log("debug logging enabled");
       }
+
       for (const signal of ["SIGINT", "SIGTERM"] as const) {
         process.on(signal, async () => {
           await app.close();
@@ -63,11 +68,8 @@ export function createCli() {
     .argument("<project>", "Project name")
     .option("--config <path>", "Override config path")
     .action(async (project, options) => {
-      const configPath = options.config ?? getConfigPath();
-      const config = await loadConfig(configPath);
-      const value = generateToken();
-      upsertToken(config, project, value);
-      await saveConfig(config, configPath);
+      const dependencies = await buildCliDependencies(options.config);
+      const value = await dependencies.tokenAdminService.create(project);
       console.log(`${project}: ${value}`);
     });
 
@@ -77,11 +79,8 @@ export function createCli() {
     .argument("<project>", "Project name")
     .option("--config <path>", "Override config path")
     .action(async (project, options) => {
-      const configPath = options.config ?? getConfigPath();
-      const config = await loadConfig(configPath);
-      const value = generateToken();
-      upsertToken(config, project, value);
-      await saveConfig(config, configPath);
+      const dependencies = await buildCliDependencies(options.config);
+      const value = await dependencies.tokenAdminService.rotate(project);
       console.log(`${project}: ${value}`);
     });
 
@@ -90,13 +89,8 @@ export function createCli() {
     .description("List configured projects")
     .option("--config <path>", "Override config path")
     .action(async (options) => {
-      const configPath = options.config ?? getConfigPath();
-      const config = await loadConfig(configPath);
-      const rows = Object.entries(config.tokens).map(([project, tokenEntry]) => ({
-        project,
-        updatedAt: tokenEntry.updatedAt,
-        tokenPreview: `${tokenEntry.token.slice(0, 10)}...`
-      }));
+      const dependencies = await buildCliDependencies(options.config);
+      const rows = await dependencies.tokenAdminService.list();
       console.table(rows);
     });
 
@@ -105,23 +99,14 @@ export function createCli() {
     .description("Show config summary and daemon health")
     .option("--config <path>", "Override config path")
     .action(async (options) => {
-      const configPath = options.config ?? getConfigPath();
-      const config = await loadConfig(configPath);
-      const summary = {
-        configPath,
-        daemon: `http://${config.daemon.host}:${config.daemon.port}`,
-        providers: summarizeProviders(config),
-        aliasCount: Object.keys(config.aliases).length,
-        tokenCount: Object.keys(config.tokens).length,
-        health: await checkHealth(config)
-      };
-      console.log(JSON.stringify(summary, null, 2));
+      const dependencies = await buildCliDependencies(options.config);
+      console.log(JSON.stringify(await dependencies.statusService.summary(), null, 2));
     });
 
   return program;
 }
 
-async function runSetupWizard(config: RoundaboutConfig) {
+async function runSetupWizard(config: RoundaboutConfig, dependencies: CliDependencies) {
   const host = await input({
     message: "Daemon host",
     default: config.daemon.host
@@ -153,7 +138,7 @@ async function runSetupWizard(config: RoundaboutConfig) {
       mask: "*"
     });
 
-    upsertProvider(config, provider.value, {
+    dependencies.configurationService.setProvider(config, provider.value, {
       enabled: true,
       apiKey
     });
@@ -165,19 +150,19 @@ async function runSetupWizard(config: RoundaboutConfig) {
   });
 
   if (shouldSeedAliases) {
-    await seedAliases(config);
+    await seedAliases(config, dependencies);
   }
 
   const defaultProject = await input({
     message: "Create an initial project token for",
     default: "default"
   });
-  upsertToken(config, defaultProject, generateToken());
+  dependencies.configurationService.setToken(config, defaultProject, generateToken());
 
   return config;
 }
 
-async function seedAliases(config: RoundaboutConfig) {
+async function seedAliases(config: RoundaboutConfig, dependencies: CliDependencies) {
   const smartProvider = await chooseProvider("Provider for smart alias", config);
   const smartModel = await input({
     message: `Model name for smart (${smartProvider})`,
@@ -191,7 +176,7 @@ async function seedAliases(config: RoundaboutConfig) {
   const embedProvider = await chooseProvider("Provider for embed alias", config, ["openai", "openrouter"]);
   const embedModel = await input({
     message: `Model name for embed (${embedProvider})`,
-    default: embedProvider === "openrouter" ? "text-embedding-3-small" : "text-embedding-3-small"
+    default: "text-embedding-3-small"
   });
 
   const smartFallback = await chooseOptionalFallback("Fallback for smart alias", config, smartProvider);
@@ -220,7 +205,7 @@ async function seedAliases(config: RoundaboutConfig) {
   };
 
   for (const [alias, route] of Object.entries(aliases)) {
-    upsertAlias(config, alias, route);
+    dependencies.configurationService.setAlias(config, alias, route);
   }
 }
 
@@ -283,20 +268,4 @@ async function chooseOptionalFallback(
     provider: selection as ProviderKind,
     model
   };
-}
-
-async function checkHealth(config: RoundaboutConfig) {
-  try {
-    const app = createServer(config);
-    await app.ready();
-    await app.close();
-    const response = await fetch(`http://${config.daemon.host}:${config.daemon.port}/healthz`);
-    if (!response.ok) {
-      return "unreachable";
-    }
-    const body = (await response.json()) as { ok: boolean };
-    return body.ok ? "running" : "unreachable";
-  } catch {
-    return "not running";
-  }
 }
