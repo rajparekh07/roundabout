@@ -1,8 +1,11 @@
 {
-  "name": "roundabout",
+  "name": "@rajparekh/roundabout",
   "version": "0.1.0",
   "description": "Local OpenAI-compatible LLM proxy",
   "main": "dist/src/index.js",
+  "exports": {
+    ".": "./dist/src/index.js"
+  },
   "bin": {
     "roundabout": "./dist/src/index.js"
   },
@@ -10,7 +13,8 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/index.ts",
     "test": "vitest run tests",
-    "release": "npm run test && npm run build && npm pack"
+    "prepack": "npm run test && npm run build",
+    "release": "npm pack"
   },
   "keywords": [
     "llm",
@@ -22,7 +26,18 @@
   "author": "Raj Parekh",
   "license": "MIT",
   "type": "module",
-  "private": true,
+  "files": [
+    "dist/src/",
+    "README.md",
+    "LICENSE"
+  ],
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/rajparekh07/roundabout.git"
