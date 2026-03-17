@@ -12,11 +12,25 @@
     "test": "vitest run tests",
     "release": "npm run test && npm run build && npm pack"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "llm",
+    "proxy",
+    "openai",
+    "anthropic",
+    "openrouter"
+  ],
+  "author": "Raj Parekh",
+  "license": "MIT",
   "type": "module",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rajparekh07/roundabout.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rajparekh07/roundabout/issues"
+  },
+  "homepage": "https://github.com/rajparekh07/roundabout#readme",
   "dependencies": {
     "@fastify/sse": "^0.4.0",
     "@inquirer/prompts": "^8.0.1",

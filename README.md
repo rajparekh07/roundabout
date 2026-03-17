@@ -57,3 +57,7 @@ Roundabout exposes an OpenAI-style `/v1` surface:
 - `GET /v1/models`
 
 Authenticate with `Authorization: Bearer <project-token>`.
+
+## License
+
+MIT. See [LICENSE](/Users/rajparekh/roundabout/LICENSE).
