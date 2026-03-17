@@ -1,13 +1,13 @@
 {
   "name": "@rajparekh/roundabout",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Local OpenAI-compatible LLM proxy",
   "main": "dist/src/index.js",
   "exports": {
     ".": "./dist/src/index.js"
   },
   "bin": {
-    "roundabout": "./dist/src/index.js"
+    "roundabout": "dist/src/index.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
