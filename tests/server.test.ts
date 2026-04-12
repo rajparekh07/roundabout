@@ -9,8 +9,8 @@ import { jsonResponse } from "./helpers.js";
 const config: RoundaboutConfig = {
   daemon: { host: "127.0.0.1", port: 4317 },
   providers: {
-    openai: { enabled: true, apiKey: "sk", baseUrl: "https://openai.test/v1" },
-    anthropic: { enabled: true, apiKey: "sk-ant", baseUrl: "https://anthropic.test/v1" }
+    openai: { enabled: true, protocol: "openai", apiKey: "sk", baseUrl: "https://openai.test/v1" },
+    anthropic: { enabled: true, protocol: "anthropic", apiKey: "sk-ant", baseUrl: "https://anthropic.test/v1" }
   },
   aliases: {
     smart: {
@@ -230,6 +230,108 @@ describe("server", () => {
     await app.close();
   });
 
+  it("routes custom openai-style providers by alias", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      jsonResponse({
+        id: "chatcmpl_1",
+        object: "chat.completion",
+        created: 1,
+        model: "gpt-4.1-mini",
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: "hello custom" },
+            finish_reason: "stop"
+          }
+        ]
+      })
+    );
+    const app = createServer(
+      {
+        ...config,
+        providers: {
+          ...config.providers,
+          gateway: {
+            enabled: true,
+            protocol: "openai",
+            apiKey: "sk-gateway",
+            baseUrl: "https://gateway.test/v1"
+          }
+        },
+        aliases: {
+          ...config.aliases,
+          gateway: {
+            primary: { provider: "gateway", model: "gpt-4.1-mini" },
+            fallbacks: [],
+            capabilities: ["chat"]
+          }
+        }
+      },
+      fetcher
+    );
+    await app.ready();
+
+    const response = await request(app.server)
+      .post("/v1/chat/completions")
+      .set("authorization", "Bearer rb_secret")
+      .send({
+        model: "gateway",
+        messages: [{ role: "user", content: "hi" }]
+      });
+
+    expect(response.status).toBe(200);
+    expect(fetcher.mock.calls[0]?.[0]).toBe("https://gateway.test/v1/chat/completions");
+    await app.close();
+  });
+
+  it("routes custom anthropic-style providers natively on anthropic endpoints", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      jsonResponse({
+        id: "msg_1",
+        type: "message",
+        model: "claude-sonnet-custom",
+        role: "assistant",
+        content: [{ type: "text", text: "hello custom anthropic" }],
+        usage: { input_tokens: 5, output_tokens: 7 },
+        stop_reason: "end_turn"
+      })
+    );
+    const app = createServer(
+      {
+        ...config,
+        providers: {
+          gatewayAnthropic: {
+            enabled: true,
+            protocol: "anthropic",
+            apiKey: "sk-gateway",
+            baseUrl: "https://anthropic-gateway.test/v1"
+          }
+        },
+        aliases: {
+          gatewayClaude: {
+            primary: { provider: "gatewayAnthropic", model: "claude-sonnet-custom" },
+            fallbacks: [],
+            capabilities: ["chat"]
+          }
+        }
+      },
+      fetcher
+    );
+    await app.ready();
+
+    const response = await request(app.server)
+      .post("/v1/messages")
+      .set("x-api-key", "rb_secret")
+      .send({
+        model: "gatewayClaude",
+        messages: [{ role: "user", content: "hi" }]
+      });
+
+    expect(response.status).toBe(200);
+    expect(fetcher.mock.calls[0]?.[0]).toBe("https://anthropic-gateway.test/v1/messages");
+    await app.close();
+  });
+
   it("supports anthropic count_tokens", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
       jsonResponse({
@@ -317,7 +419,7 @@ describe("server", () => {
 
     expect(response.status).toBe(400);
     expect(response.body.type).toBe("error");
-    expect(response.body.error.message).toContain("Provider is not enabled: anthropic");
+    expect(response.body.error.message).toContain("No enabled provider with");
     await app.close();
   });
 

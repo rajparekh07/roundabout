@@ -24,7 +24,7 @@ export class AnthropicMessagesService
     }
 
     return this.fallback.execute(resolved.targets, async (target) => {
-      if (target.provider === "anthropic") {
+      if (this.providers.supportsAnthropicNative(target.provider)) {
         return this.providers.getAnthropicGateway(target.provider).messages({
           ...command,
           model: target.model
@@ -46,7 +46,7 @@ export class AnthropicMessagesService
     }
 
     const stream = await this.fallback.execute(resolved.targets, async (target) => {
-      if (target.provider === "anthropic") {
+      if (this.providers.supportsAnthropicNative(target.provider)) {
         return this.providers.getAnthropicGateway(target.provider).streamMessages({
           ...command,
           model: target.model,

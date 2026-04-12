@@ -1,5 +1,6 @@
 import type { DebugLogger } from "../debug.js";
 import type { FetchLike } from "../providers/base.js";
+import { createDefaultRegistry } from "../providers/descriptors.js";
 import type { RoundaboutConfig } from "../types.js";
 import { AliasResolver } from "../core/alias-resolver.js";
 import type { AppContainer, ServerDependencies } from "../core/contracts.js";
@@ -19,12 +20,13 @@ export function buildAppContainer(
   fetcher?: FetchLike,
   logger: DebugLogger = { enabled: false, log() {} }
 ): AppContainer & ServerDependencies {
+  const descriptorRegistry = createDefaultRegistry();
   const aliasRepository = new InMemoryAliasRepository(config.aliases);
   const tokenRepository = new InMemoryTokenRepository(config);
   const authTokenService = new TokenAuthService(tokenRepository);
-  const providerAdapterFactory = new DefaultProviderAdapterFactory(config, fetcher);
-  const providerRegistry = new ProviderRegistry(providerAdapterFactory);
-  const aliasResolver = new AliasResolver(aliasRepository);
+  const providerAdapterFactory = new DefaultProviderAdapterFactory(config, descriptorRegistry, fetcher);
+  const providerRegistry = new ProviderRegistry(providerAdapterFactory, descriptorRegistry, config);
+  const aliasResolver = new AliasResolver(aliasRepository, config.providers, descriptorRegistry);
   const fallbackExecutor = new FallbackExecutor();
 
   const chatService = new ChatService(aliasResolver, fallbackExecutor, providerRegistry);

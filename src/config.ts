@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { configSchema } from "./schema.js";
 import type {
   AliasRoute,
-  ProviderKind,
+  ProviderName,
   ProviderSettings,
   ProjectToken,
   RoundaboutConfig
@@ -49,7 +49,7 @@ export async function saveConfig(config: RoundaboutConfig, configPath = getConfi
 
 export function upsertProvider(
   config: RoundaboutConfig,
-  provider: ProviderKind,
+  provider: ProviderName,
   settings: ProviderSettings
 ) {
   config.providers[provider] = settings;
@@ -71,10 +71,8 @@ export function upsertToken(config: RoundaboutConfig, name: string, tokenValue: 
 }
 
 export function summarizeProviders(config: RoundaboutConfig) {
-  return (Object.entries(config.providers) as Array<[ProviderKind, ProviderSettings]>).map(
-    ([provider, settings]) => ({
-      provider,
-      enabled: settings.enabled
-    })
-  );
+  return Object.entries(config.providers).map(([provider, settings]) => ({
+    provider,
+    enabled: settings.enabled
+  }));
 }

@@ -8,12 +8,11 @@ import type {
   StreamChunk
 } from "../types.js";
 import { ensureOk, getFetch } from "./http.js";
-import type { FetchLike, ProviderAdapter, ProviderStream } from "./base.js";
+import type { ChatAdapter, EmbeddingAdapter, FetchLike, ProviderStream } from "./base.js";
 
 const DEFAULT_BASE_URL = "https://api.openai.com/v1";
 
-export class OpenAiAdapter implements ProviderAdapter {
-  public readonly kind = "openai" as const;
+export class OpenAiAdapter implements ChatAdapter, EmbeddingAdapter {
   private readonly fetcher: FetchLike;
   private readonly settings: ProviderSettings;
 

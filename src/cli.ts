@@ -3,16 +3,12 @@ import { confirm, input, password, select } from "@inquirer/prompts";
 
 import { buildCliDependencies } from "./bootstrap/build-cli.js";
 import { createDebugLogger } from "./debug.js";
+import { getProviderLabel } from "./providers/metadata.js";
+import type { ProviderDescriptorRegistry } from "./providers/provider-descriptor.js";
 import { startServerWithDependencies } from "./server.js";
 import { generateToken } from "./token.js";
 import type { CliDependencies } from "./core/contracts.js";
-import type { AliasRoute, ProviderKind, RoundaboutConfig } from "./types.js";
-
-const PROVIDERS: Array<{ value: ProviderKind; label: string }> = [
-  { value: "openai", label: "OpenAI" },
-  { value: "anthropic", label: "Anthropic" },
-  { value: "openrouter", label: "OpenRouter" }
-];
+import type { AliasRoute, ProviderCapability, ProviderName, ProviderProtocol, RoundaboutConfig } from "./types.js";
 
 export function createCli() {
   const program = new Command();
@@ -107,6 +103,8 @@ export function createCli() {
 }
 
 async function runSetupWizard(config: RoundaboutConfig, dependencies: CliDependencies) {
+  const registry = dependencies.descriptorRegistry;
+
   const host = await input({
     message: "Daemon host",
     default: config.daemon.host
@@ -123,10 +121,10 @@ async function runSetupWizard(config: RoundaboutConfig, dependencies: CliDepende
   config.daemon.host = host;
   config.daemon.port = Number(port);
 
-  for (const provider of PROVIDERS) {
+  for (const descriptor of registry.list()) {
     const enabled = await confirm({
-      message: `Enable ${provider.label}?`,
-      default: Boolean(config.providers[provider.value]?.enabled)
+      message: `Enable ${descriptor.label}?`,
+      default: Boolean(config.providers[descriptor.name]?.enabled)
     });
 
     if (!enabled) {
@@ -134,13 +132,55 @@ async function runSetupWizard(config: RoundaboutConfig, dependencies: CliDepende
     }
 
     const apiKey = await password({
-      message: `${provider.label} API key`,
+      message: `${descriptor.label} API key`,
       mask: "*"
     });
 
-    dependencies.configurationService.setProvider(config, provider.value, {
+    dependencies.configurationService.setProvider(config, descriptor.name, {
       enabled: true,
+      protocol: descriptor.capabilities.has("anthropic-native") ? "anthropic" : "openai",
       apiKey
+    });
+  }
+
+  while (
+    await confirm({
+      message: "Add a custom provider?",
+      default: false
+    })
+  ) {
+    const name = await input({
+      message: "Custom provider name",
+      validate(value) {
+        return value.trim().length > 0 ? true : "Enter a provider name";
+      }
+    });
+    const protocol = await select<ProviderProtocol>({
+      message: `API protocol for ${name}`,
+      choices: [
+        { value: "openai", name: "OpenAI-compatible" },
+        { value: "anthropic", name: "Anthropic-compatible" }
+      ]
+    });
+    const apiKey = await password({
+      message: `${name} API key`,
+      mask: "*"
+    });
+    const baseUrl = await input({
+      message: `${name} base URL`,
+      validate(value) {
+        if (!value || isValidUrl(value)) {
+          return true;
+        }
+        return "Enter a valid URL";
+      }
+    });
+
+    dependencies.configurationService.setProvider(config, name, {
+      enabled: true,
+      protocol,
+      apiKey,
+      ...(baseUrl ? { baseUrl } : {})
     });
   }
 
@@ -163,28 +203,31 @@ async function runSetupWizard(config: RoundaboutConfig, dependencies: CliDepende
 }
 
 async function seedAliases(config: RoundaboutConfig, dependencies: CliDependencies) {
-  const smartProvider = await chooseProvider("Provider for smart alias", config);
+  const registry = dependencies.descriptorRegistry;
+
+  const smartProvider = await chooseProvider("Provider for smart alias", config, registry);
   const smartModel = await input({
     message: `Model name for smart (${smartProvider})`,
-    default: smartProvider === "anthropic" ? "claude-3-7-sonnet-latest" : "gpt-4.1-mini"
+    default: defaultModelForProvider(config, smartProvider, "chat")
   });
-  const fastProvider = await chooseProvider("Provider for fast alias", config);
+  const fastProvider = await chooseProvider("Provider for fast alias", config, registry);
   const fastModel = await input({
     message: `Model name for fast (${fastProvider})`,
-    default: fastProvider === "openrouter" ? "openai/gpt-4.1-mini" : "gpt-4.1-mini"
+    default: defaultModelForProvider(config, fastProvider, "chat")
   });
-  const embedProvider = await chooseProvider("Provider for embed alias", config, ["openai", "openrouter"]);
+  const embedProvider = await chooseProvider("Provider for embed alias", config, registry, {
+    capabilities: ["embeddings"]
+  });
   const embedModel = await input({
     message: `Model name for embed (${embedProvider})`,
     default: "text-embedding-3-small"
   });
 
-  const smartFallback = await chooseOptionalFallback("Fallback for smart alias", config, smartProvider);
-  const fastFallback = await chooseOptionalFallback("Fallback for fast alias", config, fastProvider);
-  const embedFallback = await chooseOptionalFallback("Fallback for embed alias", config, embedProvider, [
-    "openai",
-    "openrouter"
-  ]);
+  const smartFallback = await chooseOptionalFallback("Fallback for smart alias", config, smartProvider, registry);
+  const fastFallback = await chooseOptionalFallback("Fallback for fast alias", config, fastProvider, registry);
+  const embedFallback = await chooseOptionalFallback("Fallback for embed alias", config, embedProvider, registry, {
+    capabilities: ["embeddings"]
+  });
 
   const aliases: Record<string, AliasRoute> = {
     smart: {
@@ -212,20 +255,30 @@ async function seedAliases(config: RoundaboutConfig, dependencies: CliDependenci
 async function chooseProvider(
   message: string,
   config: RoundaboutConfig,
-  allowed?: ProviderKind[]
-): Promise<ProviderKind> {
-  const enabledProviders = PROVIDERS.filter(
-    (provider) => config.providers[provider.value]?.enabled && (!allowed || allowed.includes(provider.value))
-  );
+  registry: ProviderDescriptorRegistry,
+  options?: {
+    capabilities?: ProviderCapability[];
+  }
+): Promise<ProviderName> {
+  const enabledProviders = Object.entries(config.providers).filter(([name, settings]) => {
+    if (!settings.enabled) {
+      return false;
+    }
+    if (!options?.capabilities) {
+      return true;
+    }
+    const descriptor = registry.resolve(name, settings.protocol);
+    return options.capabilities.every((cap) => descriptor.capabilities.has(cap));
+  });
   if (enabledProviders.length === 0) {
     throw new Error("No enabled providers available for alias setup");
   }
 
   return select({
     message,
-    choices: enabledProviders.map((provider) => ({
-      value: provider.value,
-      name: provider.label
+    choices: enabledProviders.map(([provider]) => ({
+      value: provider,
+      name: getProviderLabel(registry, provider)
     }))
   });
 }
@@ -233,17 +286,24 @@ async function chooseProvider(
 async function chooseOptionalFallback(
   message: string,
   config: RoundaboutConfig,
-  excluded: ProviderKind,
-  allowed?: ProviderKind[]
+  excluded: ProviderName,
+  registry: ProviderDescriptorRegistry,
+  options?: {
+    capabilities?: ProviderCapability[];
+  }
 ) {
-  const options = PROVIDERS.filter(
-    (provider) =>
-      provider.value !== excluded &&
-      config.providers[provider.value]?.enabled &&
-      (!allowed || allowed.includes(provider.value))
-  );
+  const availableProviders = Object.entries(config.providers).filter(([provider, settings]) => {
+    if (provider === excluded || !settings.enabled) {
+      return false;
+    }
+    if (!options?.capabilities) {
+      return true;
+    }
+    const descriptor = registry.resolve(provider, settings.protocol);
+    return options.capabilities.every((cap) => descriptor.capabilities.has(cap));
+  });
 
-  if (options.length === 0) {
+  if (availableProviders.length === 0) {
     return null;
   }
 
@@ -251,7 +311,7 @@ async function chooseOptionalFallback(
     message,
     choices: [
       { value: "__none__", name: "No fallback" },
-      ...options.map((option) => ({ value: option.value, name: option.label }))
+      ...availableProviders.map(([provider]) => ({ value: provider, name: getProviderLabel(registry, provider) }))
     ]
   });
 
@@ -261,11 +321,32 @@ async function chooseOptionalFallback(
 
   const model = await input({
     message: `Fallback model for ${selection}`,
-    default: selection === "anthropic" ? "claude-3-5-haiku-latest" : "gpt-4.1-mini"
+    default: defaultModelForProvider(config, selection, "fallback")
   });
 
   return {
-    provider: selection as ProviderKind,
+    provider: selection,
     model
   };
+}
+
+function defaultModelForProvider(
+  config: RoundaboutConfig,
+  provider: ProviderName,
+  mode: "chat" | "fallback"
+) {
+  const settings = config.providers[provider];
+  if (settings?.protocol === "anthropic") {
+    return mode === "fallback" ? "claude-3-5-haiku-latest" : "claude-sonnet-4-0";
+  }
+
+  if (provider === "openrouter") {
+    return mode === "fallback" ? "openai/gpt-5.4-mini" : "openai/gpt-5.4";
+  }
+
+  return mode === "fallback" ? "gpt-5.4-mini" : "gpt-5.4";
+}
+
+function isValidUrl(value: string) {
+  return value.startsWith("https");
 }

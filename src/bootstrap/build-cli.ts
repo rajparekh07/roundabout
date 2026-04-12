@@ -1,5 +1,6 @@
 import { createDebugLogger } from "../debug.js";
 import type { CliDependencies } from "../core/contracts.js";
+import { createDefaultRegistry } from "../providers/descriptors.js";
 import { FileConfigRepository } from "../features/config/file-config-repository.js";
 import { ConfigurationService } from "../features/config/configuration-service.js";
 import { TokenAdminService } from "../features/auth/token-admin-service.js";
@@ -11,9 +12,11 @@ export async function buildCliDependencies(configPath?: string): Promise<CliDepe
   const configurationService = new ConfigurationService(configRepository);
   const tokenAdminService = new TokenAdminService(configRepository);
   const statusService = new StatusService(configRepository);
+  const descriptorRegistry = createDefaultRegistry();
 
   return {
     configRepository,
+    descriptorRegistry,
     configurationService,
     tokenAdminService,
     statusService,

@@ -7,9 +7,19 @@ import { jsonResponse } from "./helpers.js";
 const baseConfig: RoundaboutConfig = {
   daemon: { host: "127.0.0.1", port: 4317 },
   providers: {
-    openai: { enabled: true, apiKey: "sk-openai", baseUrl: "https://openai.test/v1" },
-    anthropic: { enabled: true, apiKey: "sk-anthropic", baseUrl: "https://anthropic.test/v1" },
-    openrouter: { enabled: true, apiKey: "sk-openrouter", baseUrl: "https://openrouter.test/v1" }
+    openai: { enabled: true, protocol: "openai", apiKey: "sk-openai", baseUrl: "https://openai.test/v1" },
+    anthropic: {
+      enabled: true,
+      protocol: "anthropic",
+      apiKey: "sk-anthropic",
+      baseUrl: "https://anthropic.test/v1"
+    },
+    openrouter: {
+      enabled: true,
+      protocol: "openai",
+      apiKey: "sk-openrouter",
+      baseUrl: "https://openrouter.test/v1"
+    }
   },
   aliases: {
     smart: {
@@ -82,5 +92,39 @@ describe("proxy service anthropic surface", () => {
     });
 
     expect(response.input_tokens).toBeGreaterThan(0);
+  });
+
+  it("routes raw anthropic model names to a single custom anthropic-style provider", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      jsonResponse({
+        id: "msg_1",
+        type: "message",
+        model: "claude-opus-4-1",
+        role: "assistant",
+        content: [{ type: "text", text: "hello custom raw" }],
+        stop_reason: "end_turn"
+      })
+    );
+    const service = new ProxyService(
+      {
+        ...baseConfig,
+        providers: {
+          customAnthropic: {
+            enabled: true,
+            protocol: "anthropic",
+            apiKey: "sk-custom",
+            baseUrl: "https://custom-anthropic.test/v1"
+          }
+        }
+      },
+      fetcher
+    );
+    const response = await service.messages({
+      model: "claude-opus-4-1",
+      messages: [{ role: "user", content: "hi" }]
+    });
+
+    expect(response.type).toBe("message");
+    expect(fetcher.mock.calls[0]?.[0]).toBe("https://custom-anthropic.test/v1/messages");
   });
 });

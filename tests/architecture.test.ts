@@ -4,12 +4,20 @@ import { AliasResolver } from "../src/core/alias-resolver.js";
 import { FallbackExecutor } from "../src/core/fallback-executor.js";
 import { InMemoryAliasRepository, InMemoryTokenRepository } from "../src/core/repositories.js";
 import { ProxyError } from "../src/errors.js";
+import { createDefaultRegistry } from "../src/providers/descriptors.js";
 import { TokenAuthService } from "../src/features/auth/token-auth-service.js";
 import type { RoundaboutConfig } from "../src/types.js";
 
 const config: RoundaboutConfig = {
   daemon: { host: "127.0.0.1", port: 4317 },
-  providers: {},
+  providers: {
+    anthropic: {
+      enabled: true,
+      protocol: "anthropic",
+      apiKey: "sk-anthropic",
+      baseUrl: "https://anthropic.test/v1"
+    }
+  },
   aliases: {
     smart: {
       primary: { provider: "openai", model: "gpt-primary" },
@@ -31,9 +39,11 @@ const config: RoundaboutConfig = {
   }
 };
 
+const registry = createDefaultRegistry();
+
 describe("architecture services", () => {
   it("resolves aliases and raw anthropic models explicitly", () => {
-    const resolver = new AliasResolver(new InMemoryAliasRepository(config.aliases));
+    const resolver = new AliasResolver(new InMemoryAliasRepository(config.aliases), config.providers, registry);
 
     expect(resolver.resolveRequired("smart", "chat").primary.model).toBe("gpt-primary");
     expect(resolver.resolveAnthropicModel("smart", "chat")).toEqual({
@@ -51,7 +61,7 @@ describe("architecture services", () => {
   });
 
   it("throws readable alias errors for unknown models and capability mismatches", () => {
-    const resolver = new AliasResolver(new InMemoryAliasRepository(config.aliases));
+    const resolver = new AliasResolver(new InMemoryAliasRepository(config.aliases), config.providers, registry);
 
     expect(() => resolver.resolveRequired("missing", "chat")).toThrowError(/Unknown model alias/);
     expect(() => resolver.resolveRequired("embed", "chat")).toThrowError(/does not support chat/);
@@ -60,8 +70,8 @@ describe("architecture services", () => {
   it("retries retriable failures but stops on non-retriable failures", async () => {
     const executor = new FallbackExecutor();
     const targets = [
-      { provider: "openai" as const, model: "primary" },
-      { provider: "openrouter" as const, model: "fallback" }
+      { provider: "openai", model: "primary" },
+      { provider: "openrouter", model: "fallback" }
     ];
 
     const result = await executor.execute(targets, async (target) => {
@@ -93,5 +103,26 @@ describe("architecture services", () => {
     expect(auth.validate({ authorization: "Bearer rb_secret" })).toEqual({ project: "app" });
     expect(auth.validate({ "x-api-key": "rb_secret" })).toEqual({ project: "app" });
     expect(auth.validate({ authorization: "Bearer missing" })).toBeNull();
+  });
+
+  it("selects the only enabled custom anthropic-style provider for raw model names", () => {
+    const resolver = new AliasResolver(
+      new InMemoryAliasRepository({}),
+      {
+        gatewayAnthropic: {
+          enabled: true,
+          protocol: "anthropic",
+          apiKey: "sk-gateway",
+          baseUrl: "https://anthropic-gateway.test/v1"
+        }
+      },
+      registry
+    );
+
+    expect(resolver.resolveAnthropicModel("claude-opus-4-1", "chat")).toEqual({
+      kind: "direct",
+      provider: "gatewayAnthropic",
+      model: "claude-opus-4-1"
+    });
   });
 });

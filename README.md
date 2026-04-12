@@ -110,14 +110,21 @@ By default Roundabout stores config in `~/.roundabout/config.json`.
   "providers": {
     "openai": {
       "enabled": true,
+      "apiType": "openai",
       "apiKey": "sk-openai"
+    },
+    "my-gateway": {
+      "enabled": true,
+      "apiType": "anthropic",
+      "apiKey": "sk-gateway",
+      "baseUrl": "https://gateway.example.com/v1"
     }
   },
   "aliases": {
     "smart": {
       "primary": {
-        "provider": "openai",
-        "model": "gpt-4.1-mini"
+        "provider": "my-gateway",
+        "model": "claude-sonnet-custom"
       },
       "fallbacks": [],
       "capabilities": ["chat"]
@@ -136,9 +143,11 @@ By default Roundabout stores config in `~/.roundabout/config.json`.
 Key config sections:
 
 - `daemon`: local bind host and port
-- `providers`: upstream API keys and optional custom base URLs
+- `providers`: named upstream providers, each with an `apiType` of `openai` or `anthropic`, plus API key and optional base URL
 - `aliases`: local model names and fallback routes
 - `tokens`: local client tokens accepted by the daemon
+
+Built-in provider names like `openai`, `anthropic`, and `openrouter` still work. Custom provider names work the same way, but must include `apiType`.
 
 ## API Surfaces
 

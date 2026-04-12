@@ -1,5 +1,6 @@
 import type { DebugLogger } from "../debug.js";
-import type { FetchLike, ProviderAdapter } from "../providers/base.js";
+import type { AnthropicNativeAdapter, ChatAdapter, EmbeddingAdapter, FetchLike } from "../providers/base.js";
+import type { ProviderDescriptorRegistry } from "../providers/provider-descriptor.js";
 import type {
   AliasRoute,
   AnthropicCompletionRequest,
@@ -13,7 +14,7 @@ import type {
   ChatResponse,
   EmbeddingRequest,
   EmbeddingResponse,
-  ProviderKind,
+  ProviderName,
   ProviderSettings,
   RoundaboutConfig,
   StreamChunk
@@ -45,7 +46,7 @@ export interface AnthropicGateway {
 }
 
 export interface ProviderAdapterFactory {
-  create(provider: ProviderKind): ProviderAdapter;
+  create(provider: ProviderName): ChatAdapter;
 }
 
 export interface AliasRepository {
@@ -81,12 +82,13 @@ export interface ServerDependencies {
 
 export interface CliDependencies {
   configRepository: ConfigRepository;
+  descriptorRegistry: ProviderDescriptorRegistry;
   configurationService: {
     load(): Promise<RoundaboutConfig>;
     save(config: RoundaboutConfig): Promise<void>;
     getPath(): string;
     summarizeProviders(config: RoundaboutConfig): Array<{ provider: string; enabled: boolean }>;
-    setProvider(config: RoundaboutConfig, provider: ProviderKind, settings: ProviderSettings): void;
+    setProvider(config: RoundaboutConfig, provider: ProviderName, settings: ProviderSettings): void;
     setAlias(config: RoundaboutConfig, alias: string, route: AliasRoute): void;
     setToken(config: RoundaboutConfig, project: string, token: string): void;
   };

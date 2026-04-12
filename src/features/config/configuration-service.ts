@@ -1,6 +1,6 @@
 import { summarizeProviders, upsertAlias, upsertProvider, upsertToken } from "../../config.js";
 import type { ConfigRepository } from "../../core/contracts.js";
-import type { AliasRoute, ProviderKind, ProviderSettings, RoundaboutConfig } from "../../types.js";
+import type { AliasRoute, ProviderName, ProviderSettings, RoundaboutConfig } from "../../types.js";
 
 export class ConfigurationService {
   constructor(private readonly repository: ConfigRepository) {}
@@ -21,7 +21,7 @@ export class ConfigurationService {
     return summarizeProviders(config);
   }
 
-  setProvider(config: RoundaboutConfig, provider: ProviderKind, settings: ProviderSettings) {
+  setProvider(config: RoundaboutConfig, provider: ProviderName, settings: ProviderSettings) {
     upsertProvider(config, provider, settings);
   }
 

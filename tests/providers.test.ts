@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AnthropicAdapter } from "../src/providers/anthropic.js";
 import { OpenAiAdapter } from "../src/providers/openai.js";
+import { createDefaultRegistry } from "../src/providers/descriptors.js";
 import { jsonResponse } from "./helpers.js";
 
 describe("provider adapters", () => {
@@ -21,7 +22,10 @@ describe("provider adapters", () => {
         ]
       })
     );
-    const adapter = new OpenAiAdapter({ enabled: true, apiKey: "sk", baseUrl: "https://openai.test/v1" }, fetcher);
+    const adapter = new OpenAiAdapter(
+      { enabled: true, protocol: "openai", apiKey: "sk", baseUrl: "https://openai.test/v1" },
+      fetcher
+    );
     const response = await adapter.chat(
       {
         model: "smart",
@@ -47,7 +51,7 @@ describe("provider adapters", () => {
       })
     );
     const adapter = new AnthropicAdapter(
-      { enabled: true, apiKey: "sk", baseUrl: "https://anthropic.test/v1" },
+      { enabled: true, protocol: "anthropic", apiKey: "sk", baseUrl: "https://anthropic.test/v1" },
       fetcher
     );
     const response = await adapter.chat(
@@ -75,7 +79,7 @@ describe("provider adapters", () => {
       })
     );
     const adapter = new AnthropicAdapter(
-      { enabled: true, apiKey: "sk", baseUrl: "https://anthropic.test/v1" },
+      { enabled: true, protocol: "anthropic", apiKey: "sk", baseUrl: "https://anthropic.test/v1" },
       fetcher
     );
     const response = await adapter.messages({
@@ -94,7 +98,7 @@ describe("provider adapters", () => {
       })
     );
     const adapter = new AnthropicAdapter(
-      { enabled: true, apiKey: "sk", baseUrl: "https://anthropic.test/v1" },
+      { enabled: true, protocol: "anthropic", apiKey: "sk", baseUrl: "https://anthropic.test/v1" },
       fetcher
     );
     const response = await adapter.countTokens({
@@ -103,5 +107,43 @@ describe("provider adapters", () => {
     });
 
     expect(response.input_tokens).toBe(42);
+  });
+
+  it("creates adapters for custom provider names via descriptor registry", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      jsonResponse({
+        id: "chatcmpl_1",
+        object: "chat.completion",
+        created: 1,
+        model: "gpt-4.1-mini",
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: "from custom" },
+            finish_reason: "stop"
+          }
+        ]
+      })
+    );
+    const registry = createDefaultRegistry();
+    const settings = {
+      enabled: true,
+      protocol: "openai" as const,
+      apiKey: "sk-gateway",
+      baseUrl: "https://gateway.test/v1"
+    };
+    const descriptor = registry.resolve("gateway", settings.protocol);
+    const adapter = descriptor.createAdapter(settings, fetcher);
+
+    const response = await adapter.chat(
+      {
+        model: "smart",
+        messages: [{ role: "user", content: "hi" }]
+      },
+      "gpt-4.1-mini"
+    );
+
+    expect(response.choices[0]?.message.content).toBe("from custom");
+    expect(fetcher.mock.calls[0]?.[0]).toBe("https://gateway.test/v1/chat/completions");
   });
 });
