@@ -208,12 +208,12 @@ async function seedAliases(config: RoundaboutConfig, dependencies: CliDependenci
   const smartProvider = await chooseProvider("Provider for smart alias", config, registry);
   const smartModel = await input({
     message: `Model name for smart (${smartProvider})`,
-    default: defaultModelForProvider(config, smartProvider, "chat")
+    default: defaultModelForProvider(config, smartProvider)
   });
   const fastProvider = await chooseProvider("Provider for fast alias", config, registry);
   const fastModel = await input({
     message: `Model name for fast (${fastProvider})`,
-    default: defaultModelForProvider(config, fastProvider, "chat")
+    default: defaultModelForProvider(config, fastProvider)
   });
   const embedProvider = await chooseProvider("Provider for embed alias", config, registry, {
     capabilities: ["embeddings"]
@@ -321,7 +321,7 @@ async function chooseOptionalFallback(
 
   const model = await input({
     message: `Fallback model for ${selection}`,
-    default: defaultModelForProvider(config, selection, "fallback")
+    default: defaultModelForProvider(config, selection)
   });
 
   return {
@@ -332,19 +332,18 @@ async function chooseOptionalFallback(
 
 function defaultModelForProvider(
   config: RoundaboutConfig,
-  provider: ProviderName,
-  mode: "chat" | "fallback"
+  provider: ProviderName
 ) {
   const settings = config.providers[provider];
   if (settings?.protocol === "anthropic") {
-    return mode === "fallback" ? "claude-3-5-haiku-latest" : "claude-sonnet-4-0";
+    return "claude-sonnet-4-0";
   }
 
   if (provider === "openrouter") {
-    return mode === "fallback" ? "openai/gpt-5.4-mini" : "openai/gpt-5.4";
+    return "openai/gpt-5.4";
   }
 
-  return mode === "fallback" ? "gpt-5.4-mini" : "gpt-5.4";
+  return "gpt-5.4";
 }
 
 function isValidUrl(value: string) {

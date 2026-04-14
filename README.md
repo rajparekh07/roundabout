@@ -110,7 +110,6 @@ By default Roundabout stores config in `~/.roundabout/config.json`.
   "providers": {
     "openai": {
       "enabled": true,
-      "apiType": "openai",
       "apiKey": "sk-openai"
     },
     "my-gateway": {
