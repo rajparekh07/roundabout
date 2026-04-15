@@ -1,7 +1,8 @@
 import type { DebugLogger } from "../debug.js";
-import type { FetchLike, ProviderAdapter } from "../providers/base.js";
+import type { AnthropicNativeAdapter, ChatAdapter, EmbeddingAdapter, FetchLike } from "../providers/base.js";
+import type { ProviderDescriptorRegistry } from "../providers/provider-descriptor.js";
 import type {
-  AliasRoute,
+  ModelRoute,
   AnthropicCompletionRequest,
   AnthropicCompletionResponse,
   AnthropicCountTokensRequest,
@@ -13,7 +14,7 @@ import type {
   ChatResponse,
   EmbeddingRequest,
   EmbeddingResponse,
-  ProviderKind,
+  ProviderName,
   ProviderSettings,
   RoundaboutConfig,
   StreamChunk
@@ -45,12 +46,12 @@ export interface AnthropicGateway {
 }
 
 export interface ProviderAdapterFactory {
-  create(provider: ProviderKind): ProviderAdapter;
+  create(provider: ProviderName): ChatAdapter;
 }
 
-export interface AliasRepository {
-  get(alias: string): AliasRoute | undefined;
-  list(): Record<string, AliasRoute>;
+export interface ModelRepository {
+  get(modelKey: string): ModelRoute | undefined;
+  list(): Record<string, ModelRoute>;
 }
 
 export interface TokenRepository {
@@ -81,13 +82,14 @@ export interface ServerDependencies {
 
 export interface CliDependencies {
   configRepository: ConfigRepository;
+  descriptorRegistry: ProviderDescriptorRegistry;
   configurationService: {
     load(): Promise<RoundaboutConfig>;
     save(config: RoundaboutConfig): Promise<void>;
     getPath(): string;
     summarizeProviders(config: RoundaboutConfig): Array<{ provider: string; enabled: boolean }>;
-    setProvider(config: RoundaboutConfig, provider: ProviderKind, settings: ProviderSettings): void;
-    setAlias(config: RoundaboutConfig, alias: string, route: AliasRoute): void;
+    setProvider(config: RoundaboutConfig, provider: ProviderName, settings: ProviderSettings): void;
+    setModel(config: RoundaboutConfig, modelKey: string, route: ModelRoute): void;
     setToken(config: RoundaboutConfig, project: string, token: string): void;
   };
   tokenAdminService: {
@@ -100,7 +102,7 @@ export interface CliDependencies {
       configPath: string;
       daemon: string;
       providers: Array<{ provider: string; enabled: boolean }>;
-      aliasCount: number;
+      modelCount: number;
       tokenCount: number;
       health: string;
     }>;
@@ -112,7 +114,7 @@ export interface AppContainer {
   config: RoundaboutConfig;
   logger: DebugLogger;
   fetcher?: FetchLike;
-  aliasRepository: AliasRepository;
+  modelRepository: ModelRepository;
   tokenRepository: TokenRepository;
   authTokenService: ServerDependencies["authTokenService"];
   providerAdapterFactory: ProviderAdapterFactory;

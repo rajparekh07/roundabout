@@ -17,12 +17,11 @@ import type {
   StreamChunk
 } from "../types.js";
 import { ensureOk, getFetch } from "./http.js";
-import type { FetchLike, ProviderAdapter, ProviderStream } from "./base.js";
+import type { AnthropicNativeAdapter, ChatAdapter, FetchLike, ProviderStream } from "./base.js";
 
 const DEFAULT_BASE_URL = "https://api.anthropic.com/v1";
 
-export class AnthropicAdapter implements ProviderAdapter {
-  public readonly kind = "anthropic" as const;
+export class AnthropicAdapter implements ChatAdapter, AnthropicNativeAdapter {
   private readonly settings: ProviderSettings;
   private readonly fetcher: FetchLike;
 
@@ -127,13 +126,6 @@ export class AnthropicAdapter implements ProviderAdapter {
         }
       }
     };
-  }
-
-  async embeddings(): Promise<never> {
-    throw new ProxyError("Anthropic does not support embeddings via this proxy", {
-      statusCode: 400,
-      code: "provider_unsupported_capability"
-    });
   }
 
   async messages(request: AnthropicMessageRequest): Promise<AnthropicMessageResponse> {
@@ -283,7 +275,7 @@ function completionToMessageRequest(request: AnthropicCompletionRequest): Anthro
   };
 }
 
-function fromAnthropicResponse(response: AnthropicMessageResponse, requestedAlias: string): ChatResponse {
+function fromAnthropicResponse(response: AnthropicMessageResponse, requestedModel: string): ChatResponse {
   const content = response.content.map((part) => part.text).join("");
   const message: ChatMessage = {
     role: "assistant",
@@ -293,7 +285,7 @@ function fromAnthropicResponse(response: AnthropicMessageResponse, requestedAlia
     id: response.id,
     object: "chat.completion",
     created: Math.floor(Date.now() / 1000),
-    model: requestedAlias,
+    model: requestedModel,
     choices: [
       {
         index: 0,

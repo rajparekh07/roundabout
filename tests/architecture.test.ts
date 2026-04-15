@@ -1,24 +1,33 @@
 import { describe, expect, it } from "vitest";
 
-import { AliasResolver } from "../src/core/alias-resolver.js";
+import { ModelResolver } from "../src/core/model-resolver.js";
+import { orderedTargets } from "../src/core/model-resolver.js";
 import { FallbackExecutor } from "../src/core/fallback-executor.js";
-import { InMemoryAliasRepository, InMemoryTokenRepository } from "../src/core/repositories.js";
+import { InMemoryModelRepository, InMemoryTokenRepository } from "../src/core/repositories.js";
 import { ProxyError } from "../src/errors.js";
 import { TokenAuthService } from "../src/features/auth/token-auth-service.js";
 import type { RoundaboutConfig } from "../src/types.js";
 
 const config: RoundaboutConfig = {
   daemon: { host: "127.0.0.1", port: 4317 },
-  providers: {},
-  aliases: {
+  providers: {
+    anthropic: {
+      enabled: true,
+      protocol: "anthropic",
+      apiKey: "sk-anthropic",
+      baseUrl: "https://anthropic.test/v1"
+    }
+  },
+  models: {
     smart: {
-      primary: { provider: "openai", model: "gpt-primary" },
-      fallbacks: [{ provider: "openrouter", model: "gpt-fallback" }],
+      providers: [
+        { provider: "openai", model: "gpt-primary" },
+        { provider: "openrouter", model: "gpt-fallback" }
+      ],
       capabilities: ["chat"]
     },
     embed: {
-      primary: { provider: "openai", model: "text-embedding-3-small" },
-      fallbacks: [],
+      providers: [{ provider: "openai", model: "text-embedding-3-small" }],
       capabilities: ["embeddings"]
     }
   },
@@ -32,36 +41,28 @@ const config: RoundaboutConfig = {
 };
 
 describe("architecture services", () => {
-  it("resolves aliases and raw anthropic models explicitly", () => {
-    const resolver = new AliasResolver(new InMemoryAliasRepository(config.aliases));
+  it("resolves models with ordered provider targets", () => {
+    const resolver = new ModelResolver(new InMemoryModelRepository(config.models));
 
-    expect(resolver.resolveRequired("smart", "chat").primary.model).toBe("gpt-primary");
-    expect(resolver.resolveAnthropicModel("smart", "chat")).toEqual({
-      kind: "alias",
-      targets: [
-        { provider: "openai", model: "gpt-primary" },
-        { provider: "openrouter", model: "gpt-fallback" }
-      ]
-    });
-    expect(resolver.resolveAnthropicModel("claude-opus-4-1", "chat")).toEqual({
-      kind: "direct",
-      provider: "anthropic",
-      model: "claude-opus-4-1"
-    });
+    const targets = resolver.resolveRequired("smart", "chat");
+    expect(targets).toEqual([
+      { provider: "openai", model: "gpt-primary" },
+      { provider: "openrouter", model: "gpt-fallback" }
+    ]);
   });
 
-  it("throws readable alias errors for unknown models and capability mismatches", () => {
-    const resolver = new AliasResolver(new InMemoryAliasRepository(config.aliases));
+  it("throws readable model errors for unknown models and capability mismatches", () => {
+    const resolver = new ModelResolver(new InMemoryModelRepository(config.models));
 
-    expect(() => resolver.resolveRequired("missing", "chat")).toThrowError(/Unknown model alias/);
+    expect(() => resolver.resolveRequired("missing", "chat")).toThrowError(/Unknown model/);
     expect(() => resolver.resolveRequired("embed", "chat")).toThrowError(/does not support chat/);
   });
 
   it("retries retriable failures but stops on non-retriable failures", async () => {
     const executor = new FallbackExecutor();
     const targets = [
-      { provider: "openai" as const, model: "primary" },
-      { provider: "openrouter" as const, model: "fallback" }
+      { provider: "openai", model: "primary" },
+      { provider: "openrouter", model: "fallback" }
     ];
 
     const result = await executor.execute(targets, async (target) => {
@@ -93,5 +94,39 @@ describe("architecture services", () => {
     expect(auth.validate({ authorization: "Bearer rb_secret" })).toEqual({ project: "app" });
     expect(auth.validate({ "x-api-key": "rb_secret" })).toEqual({ project: "app" });
     expect(auth.validate({ authorization: "Bearer missing" })).toBeNull();
+  });
+
+  it("resolves omitted provider model to the parent model key", () => {
+    const models = {
+      glm54: {
+        providers: [
+          { provider: "openrouter", model: "openai/gpt-5.4" },
+          { provider: "openai" }
+        ],
+        capabilities: ["chat" as const]
+      }
+    };
+    const resolver = new ModelResolver(new InMemoryModelRepository(models));
+
+    const targets = resolver.resolveRequired("glm54", "chat");
+    expect(targets[0]).toEqual({ provider: "openrouter", model: "openai/gpt-5.4" });
+    expect(targets[1]).toEqual({ provider: "openai", model: "glm54" });
+  });
+
+  it("first provider is attempted before later providers", () => {
+    const models = {
+      smart: {
+        providers: [
+          { provider: "openai", model: "gpt-primary" },
+          { provider: "openrouter", model: "gpt-fallback" }
+        ],
+        capabilities: ["chat" as const]
+      }
+    };
+    const resolver = new ModelResolver(new InMemoryModelRepository(models));
+
+    const targets = resolver.resolveRequired("smart", "chat");
+    expect(targets[0]?.provider).toBe("openai");
+    expect(targets[1]?.provider).toBe("openrouter");
   });
 });

@@ -1,26 +1,36 @@
 import { z } from "zod";
 
-const providerKind = z.enum(["openai", "anthropic", "openrouter"]);
+const providerProtocol = z.enum(["openai", "anthropic"]);
 
 export const daemonSchema = z.object({
   host: z.string().min(1).default("127.0.0.1"),
   port: z.number().int().min(1).max(65535).default(4317)
 });
 
-export const providerSettingsSchema = z.object({
-  enabled: z.boolean().default(false),
-  apiKey: z.string().min(1),
-  baseUrl: z.string().url().optional()
+const rawProviderSettingsSchema = z
+  .object({
+    enabled: z.boolean().default(false),
+    protocol: providerProtocol.optional(),
+    apiType: providerProtocol.optional(),
+    apiKey: z.string().min(1),
+    baseUrl: z.string().url().optional()
+  })
+  .transform((settings) => ({
+    enabled: settings.enabled,
+    protocol: settings.protocol ?? settings.apiType ?? ("openai" as const),
+    apiKey: settings.apiKey,
+    baseUrl: settings.baseUrl
+  }));
+
+export const providerSettingsSchema = rawProviderSettingsSchema;
+
+export const modelProviderRouteSchema = z.object({
+  provider: z.string().min(1),
+  model: z.string().min(1).optional()
 });
 
-export const routeTargetSchema = z.object({
-  provider: providerKind,
-  model: z.string().min(1)
-});
-
-export const aliasRouteSchema = z.object({
-  primary: routeTargetSchema,
-  fallbacks: z.array(routeTargetSchema).default([]),
+export const modelRouteSchema = z.object({
+  providers: z.array(modelProviderRouteSchema).min(1),
   capabilities: z.array(z.enum(["chat", "embeddings"])).min(1)
 });
 
@@ -30,10 +40,10 @@ export const projectTokenSchema = z.object({
   updatedAt: z.string().datetime()
 });
 
-export const configSchema = z.object({
+export const configSchema = z.strictObject({
   daemon: daemonSchema.default({ host: "127.0.0.1", port: 4317 }),
-  providers: z.record(z.string(), providerSettingsSchema).default({}),
-  aliases: z.record(z.string(), aliasRouteSchema).default({}),
+  providers: z.record(z.string(), rawProviderSettingsSchema).default({}),
+  models: z.record(z.string(), modelRouteSchema).default({}),
   tokens: z.record(z.string(), projectTokenSchema).default({})
 });
 

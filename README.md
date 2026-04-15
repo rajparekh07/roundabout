@@ -2,15 +2,15 @@
 
 Roundabout is a local LLM gateway you run on your own machine.
 
-It starts a daemon on `localhost`, exposes OpenAI-compatible and Anthropic-compatible endpoints, and routes stable model aliases to upstream providers like OpenAI, Anthropic, and OpenRouter. The goal is to let local tools talk to one endpoint while you keep provider keys, aliases, and fallback policy in one place.
+It starts a daemon on `localhost`, exposes OpenAI-compatible and Anthropic-compatible endpoints, and routes stable model names to upstream providers like OpenAI, Anthropic, and OpenRouter. The goal is to let local tools talk to one endpoint while you keep provider keys, model config, and fallback policy in one place.
 
 ## What It Does
 
 - runs a local daemon with a single auth/token model for your apps
 - exposes OpenAI-style chat and embeddings endpoints
 - exposes Anthropic-style messages, completions, and token counting endpoints
-- resolves local model aliases to provider/model targets
-- supports ordered provider fallback through alias config
+- resolves local model names to provider/model targets with ordered fallback
+- supports ordered provider fallback through model config
 - works well as a bridge for local tools such as Claude Code or custom scripts
 
 ## Install
@@ -111,15 +111,19 @@ By default Roundabout stores config in `~/.roundabout/config.json`.
     "openai": {
       "enabled": true,
       "apiKey": "sk-openai"
+    },
+    "my-gateway": {
+      "enabled": true,
+      "apiType": "anthropic",
+      "apiKey": "sk-gateway",
+      "baseUrl": "https://gateway.example.com/v1"
     }
   },
-  "aliases": {
+  "models": {
     "smart": {
-      "primary": {
-        "provider": "openai",
-        "model": "gpt-4.1-mini"
-      },
-      "fallbacks": [],
+      "providers": [
+        { "provider": "my-gateway", "model": "claude-sonnet-custom" }
+      ],
       "capabilities": ["chat"]
     }
   },
@@ -136,9 +140,11 @@ By default Roundabout stores config in `~/.roundabout/config.json`.
 Key config sections:
 
 - `daemon`: local bind host and port
-- `providers`: upstream API keys and optional custom base URLs
-- `aliases`: local model names and fallback routes
+- `providers`: named upstream providers, each with an `apiType` of `openai` or `anthropic`, plus API key and optional base URL
+- `models`: local model names and ordered provider routes
 - `tokens`: local client tokens accepted by the daemon
+
+Built-in provider names like `openai`, `anthropic`, and `openrouter` still work. Custom provider names work the same way, but must include `apiType`.
 
 ## API Surfaces
 

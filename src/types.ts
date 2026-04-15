@@ -1,4 +1,7 @@
-export type ProviderKind = "openai" | "anthropic" | "openrouter";
+export type BuiltinProviderName = "openai" | "anthropic" | "openrouter";
+export type ProviderName = string;
+export type ProviderProtocol = "openai" | "anthropic";
+export type ProviderCapability = "chat" | "embeddings" | "anthropic-native";
 
 export interface DaemonConfig {
   host: string;
@@ -7,18 +10,23 @@ export interface DaemonConfig {
 
 export interface ProviderSettings {
   enabled: boolean;
+  protocol: ProviderProtocol;
   apiKey: string;
   baseUrl?: string;
 }
 
 export interface RouteTarget {
-  provider: ProviderKind;
+  provider: ProviderName;
   model: string;
 }
 
-export interface AliasRoute {
-  primary: RouteTarget;
-  fallbacks: RouteTarget[];
+export interface ModelProviderRoute {
+  provider: ProviderName;
+  model?: string;
+}
+
+export interface ModelRoute {
+  providers: ModelProviderRoute[];
   capabilities: Array<"chat" | "embeddings">;
 }
 
@@ -30,8 +38,8 @@ export interface ProjectToken {
 
 export interface RoundaboutConfig {
   daemon: DaemonConfig;
-  providers: Partial<Record<ProviderKind, ProviderSettings>>;
-  aliases: Record<string, AliasRoute>;
+  providers: Record<ProviderName, ProviderSettings>;
+  models: Record<string, ModelRoute>;
   tokens: Record<string, ProjectToken>;
 }
 
