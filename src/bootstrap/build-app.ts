@@ -2,12 +2,12 @@ import type { DebugLogger } from "../debug.js";
 import type { FetchLike } from "../providers/base.js";
 import { createDefaultRegistry } from "../providers/descriptors.js";
 import type { RoundaboutConfig } from "../types.js";
-import { AliasResolver } from "../core/alias-resolver.js";
+import { ModelResolver } from "../core/model-resolver.js";
 import type { AppContainer, ServerDependencies } from "../core/contracts.js";
 import { FallbackExecutor } from "../core/fallback-executor.js";
 import { DefaultProviderAdapterFactory } from "../core/provider-adapter-factory.js";
 import { ProviderRegistry } from "../core/provider-registry.js";
-import { InMemoryAliasRepository, InMemoryTokenRepository } from "../core/repositories.js";
+import { InMemoryModelRepository, InMemoryTokenRepository } from "../core/repositories.js";
 import { TokenAuthService } from "../features/auth/token-auth-service.js";
 import { ChatService } from "../features/chat/chat-service.js";
 import { EmbeddingService } from "../features/embeddings/embedding-service.js";
@@ -21,25 +21,25 @@ export function buildAppContainer(
   logger: DebugLogger = { enabled: false, log() {} }
 ): AppContainer & ServerDependencies {
   const descriptorRegistry = createDefaultRegistry();
-  const aliasRepository = new InMemoryAliasRepository(config.aliases);
+  const modelRepository = new InMemoryModelRepository(config.models);
   const tokenRepository = new InMemoryTokenRepository(config);
   const authTokenService = new TokenAuthService(tokenRepository);
   const providerAdapterFactory = new DefaultProviderAdapterFactory(config, descriptorRegistry, fetcher);
   const providerRegistry = new ProviderRegistry(providerAdapterFactory, descriptorRegistry, config);
-  const aliasResolver = new AliasResolver(aliasRepository, config.providers, descriptorRegistry);
+  const modelResolver = new ModelResolver(modelRepository);
   const fallbackExecutor = new FallbackExecutor();
 
-  const chatService = new ChatService(aliasResolver, fallbackExecutor, providerRegistry);
-  const embeddingService = new EmbeddingService(aliasResolver, fallbackExecutor, providerRegistry);
-  const anthropicMessagesService = new AnthropicMessagesService(aliasResolver, fallbackExecutor, providerRegistry);
+  const chatService = new ChatService(modelResolver, fallbackExecutor, providerRegistry);
+  const embeddingService = new EmbeddingService(modelResolver, fallbackExecutor, providerRegistry);
+  const anthropicMessagesService = new AnthropicMessagesService(modelResolver, fallbackExecutor, providerRegistry);
   const anthropicCompletionsService = new AnthropicCompletionsService(anthropicMessagesService);
-  const tokenCountService = new TokenCountService(aliasResolver, providerRegistry);
+  const tokenCountService = new TokenCountService(modelResolver, providerRegistry);
 
   return {
     config,
     fetcher,
     logger,
-    aliasRepository,
+    modelRepository,
     tokenRepository,
     authTokenService,
     providerAdapterFactory,

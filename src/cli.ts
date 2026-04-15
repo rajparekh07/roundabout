@@ -8,7 +8,7 @@ import type { ProviderDescriptorRegistry } from "./providers/provider-descriptor
 import { startServerWithDependencies } from "./server.js";
 import { generateToken } from "./token.js";
 import type { CliDependencies } from "./core/contracts.js";
-import type { AliasRoute, ProviderCapability, ProviderName, ProviderProtocol, RoundaboutConfig } from "./types.js";
+import type { ModelRoute, ProviderCapability, ProviderName, ProviderProtocol, RoundaboutConfig } from "./types.js";
 
 export function createCli() {
   const program = new Command();
@@ -184,13 +184,13 @@ async function runSetupWizard(config: RoundaboutConfig, dependencies: CliDepende
     });
   }
 
-  const shouldSeedAliases = await confirm({
-    message: "Create default aliases?",
-    default: Object.keys(config.aliases).length === 0
+  const shouldSeedModels = await confirm({
+    message: "Create default models?",
+    default: Object.keys(config.models).length === 0
   });
 
-  if (shouldSeedAliases) {
-    await seedAliases(config, dependencies);
+  if (shouldSeedModels) {
+    await seedModels(config, dependencies);
   }
 
   const defaultProject = await input({
@@ -202,20 +202,20 @@ async function runSetupWizard(config: RoundaboutConfig, dependencies: CliDepende
   return config;
 }
 
-async function seedAliases(config: RoundaboutConfig, dependencies: CliDependencies) {
+async function seedModels(config: RoundaboutConfig, dependencies: CliDependencies) {
   const registry = dependencies.descriptorRegistry;
 
-  const smartProvider = await chooseProvider("Provider for smart alias", config, registry);
+  const smartProvider = await chooseProvider("Provider for smart model", config, registry);
   const smartModel = await input({
     message: `Model name for smart (${smartProvider})`,
     default: defaultModelForProvider(config, smartProvider)
   });
-  const fastProvider = await chooseProvider("Provider for fast alias", config, registry);
+  const fastProvider = await chooseProvider("Provider for fast model", config, registry);
   const fastModel = await input({
     message: `Model name for fast (${fastProvider})`,
     default: defaultModelForProvider(config, fastProvider)
   });
-  const embedProvider = await chooseProvider("Provider for embed alias", config, registry, {
+  const embedProvider = await chooseProvider("Provider for embed model", config, registry, {
     capabilities: ["embeddings"]
   });
   const embedModel = await input({
@@ -223,32 +223,38 @@ async function seedAliases(config: RoundaboutConfig, dependencies: CliDependenci
     default: "text-embedding-3-small"
   });
 
-  const smartFallback = await chooseOptionalFallback("Fallback for smart alias", config, smartProvider, registry);
-  const fastFallback = await chooseOptionalFallback("Fallback for fast alias", config, fastProvider, registry);
-  const embedFallback = await chooseOptionalFallback("Fallback for embed alias", config, embedProvider, registry, {
+  const smartFallback = await chooseOptionalFallback("Fallback for smart model", config, smartProvider, registry);
+  const fastFallback = await chooseOptionalFallback("Fallback for fast model", config, fastProvider, registry);
+  const embedFallback = await chooseOptionalFallback("Fallback for embed model", config, embedProvider, registry, {
     capabilities: ["embeddings"]
   });
 
-  const aliases: Record<string, AliasRoute> = {
+  const models: Record<string, ModelRoute> = {
     smart: {
-      primary: { provider: smartProvider, model: smartModel },
-      fallbacks: smartFallback ? [smartFallback] : [],
+      providers: [
+        { provider: smartProvider, model: smartModel },
+        ...(smartFallback ? [smartFallback] : [])
+      ],
       capabilities: ["chat"]
     },
     fast: {
-      primary: { provider: fastProvider, model: fastModel },
-      fallbacks: fastFallback ? [fastFallback] : [],
+      providers: [
+        { provider: fastProvider, model: fastModel },
+        ...(fastFallback ? [fastFallback] : [])
+      ],
       capabilities: ["chat"]
     },
     embed: {
-      primary: { provider: embedProvider, model: embedModel },
-      fallbacks: embedFallback ? [embedFallback] : [],
+      providers: [
+        { provider: embedProvider, model: embedModel },
+        ...(embedFallback ? [embedFallback] : [])
+      ],
       capabilities: ["embeddings"]
     }
   };
 
-  for (const [alias, route] of Object.entries(aliases)) {
-    dependencies.configurationService.setAlias(config, alias, route);
+  for (const [modelKey, route] of Object.entries(models)) {
+    dependencies.configurationService.setModel(config, modelKey, route);
   }
 }
 
@@ -271,7 +277,7 @@ async function chooseProvider(
     return options.capabilities.every((cap) => descriptor.capabilities.has(cap));
   });
   if (enabledProviders.length === 0) {
-    throw new Error("No enabled providers available for alias setup");
+    throw new Error("No enabled providers available for model setup");
   }
 
   return select({

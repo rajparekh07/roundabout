@@ -10,7 +10,7 @@ export class StatusService {
       configPath: this.repository.getPath(),
       daemon: `http://${config.daemon.host}:${config.daemon.port}`,
       providers: summarizeProviders(config),
-      aliasCount: Object.keys(config.aliases).length,
+      modelCount: Object.keys(config.models).length,
       tokenCount: Object.keys(config.tokens).length,
       health: await this.checkHealth(config.daemon.host, config.daemon.port)
     };

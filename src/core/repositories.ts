@@ -1,15 +1,15 @@
-import type { AliasRoute, RoundaboutConfig } from "../types.js";
-import type { AliasRepository, TokenRepository } from "./contracts.js";
+import type { ModelRoute, RoundaboutConfig } from "../types.js";
+import type { ModelRepository, TokenRepository } from "./contracts.js";
 
-export class InMemoryAliasRepository implements AliasRepository {
-  constructor(private readonly aliases: Record<string, AliasRoute>) {}
+export class InMemoryModelRepository implements ModelRepository {
+  constructor(private readonly models: Record<string, ModelRoute>) {}
 
-  get(alias: string) {
-    return this.aliases[alias];
+  get(modelKey: string) {
+    return this.models[modelKey];
   }
 
   list() {
-    return this.aliases;
+    return this.models;
   }
 }
 

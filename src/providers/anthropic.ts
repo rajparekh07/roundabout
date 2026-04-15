@@ -275,7 +275,7 @@ function completionToMessageRequest(request: AnthropicCompletionRequest): Anthro
   };
 }
 
-function fromAnthropicResponse(response: AnthropicMessageResponse, requestedAlias: string): ChatResponse {
+function fromAnthropicResponse(response: AnthropicMessageResponse, requestedModel: string): ChatResponse {
   const content = response.content.map((part) => part.text).join("");
   const message: ChatMessage = {
     role: "assistant",
@@ -285,7 +285,7 @@ function fromAnthropicResponse(response: AnthropicMessageResponse, requestedAlia
     id: response.id,
     object: "chat.completion",
     created: Math.floor(Date.now() / 1000),
-    model: requestedAlias,
+    model: requestedModel,
     choices: [
       {
         index: 0,

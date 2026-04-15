@@ -21,15 +21,20 @@ const baseConfig: RoundaboutConfig = {
       baseUrl: "https://openrouter.test/v1"
     }
   },
-  aliases: {
+  models: {
     smart: {
-      primary: { provider: "openai", model: "gpt-primary" },
-      fallbacks: [{ provider: "openrouter", model: "gpt-fallback" }],
+      providers: [
+        { provider: "openai", model: "gpt-primary" },
+        { provider: "openrouter", model: "gpt-fallback" }
+      ],
       capabilities: ["chat"]
     },
     claude: {
-      primary: { provider: "anthropic", model: "claude-primary" },
-      fallbacks: [],
+      providers: [{ provider: "anthropic", model: "claude-primary" }],
+      capabilities: ["chat"]
+    },
+    "claude-opus-4-1": {
+      providers: [{ provider: "anthropic", model: "claude-opus-4-1" }],
       capabilities: ["chat"]
     }
   },
@@ -37,7 +42,7 @@ const baseConfig: RoundaboutConfig = {
 };
 
 describe("proxy service anthropic surface", () => {
-  it("routes alias names on anthropic messages", async () => {
+  it("routes model names on anthropic messages", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
       jsonResponse({
         id: "chatcmpl_1",
@@ -63,7 +68,7 @@ describe("proxy service anthropic surface", () => {
     expect(response.content[0]?.text).toBe("hello");
   });
 
-  it("routes raw model names directly to anthropic", async () => {
+  it("routes configured anthropic model names directly to anthropic", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
       jsonResponse({
         id: "msg_1",
@@ -84,17 +89,17 @@ describe("proxy service anthropic surface", () => {
     expect(fetcher.mock.calls[0]?.[0]).toBe("https://anthropic.test/v1/messages");
   });
 
-  it("estimates count_tokens for aliased non-anthropic providers", async () => {
+  it("estimates count_tokens for model-routed non-anthropic providers", async () => {
     const service = new ProxyService(baseConfig, vi.fn());
     const response = await service.countTokens({
       model: "smart",
-      messages: [{ role: "user", content: "hello from alias route" }]
+      messages: [{ role: "user", content: "hello from model route" }]
     });
 
     expect(response.input_tokens).toBeGreaterThan(0);
   });
 
-  it("routes raw anthropic model names to a single custom anthropic-style provider", async () => {
+  it("routes configured anthropic model names to a custom anthropic-style provider", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
       jsonResponse({
         id: "msg_1",
@@ -114,6 +119,12 @@ describe("proxy service anthropic surface", () => {
             protocol: "anthropic",
             apiKey: "sk-custom",
             baseUrl: "https://custom-anthropic.test/v1"
+          }
+        },
+        models: {
+          "claude-opus-4-1": {
+            providers: [{ provider: "customAnthropic", model: "claude-opus-4-1" }],
+            capabilities: ["chat"]
           }
         }
       },

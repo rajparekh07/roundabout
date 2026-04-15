@@ -20,9 +20,13 @@ export interface RouteTarget {
   model: string;
 }
 
-export interface AliasRoute {
-  primary: RouteTarget;
-  fallbacks: RouteTarget[];
+export interface ModelProviderRoute {
+  provider: ProviderName;
+  model?: string;
+}
+
+export interface ModelRoute {
+  providers: ModelProviderRoute[];
   capabilities: Array<"chat" | "embeddings">;
 }
 
@@ -35,7 +39,7 @@ export interface ProjectToken {
 export interface RoundaboutConfig {
   daemon: DaemonConfig;
   providers: Record<ProviderName, ProviderSettings>;
-  aliases: Record<string, AliasRoute>;
+  models: Record<string, ModelRoute>;
   tokens: Record<string, ProjectToken>;
 }
 

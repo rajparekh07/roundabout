@@ -81,16 +81,16 @@ export function createServerWithDependencies(dependencies: ServerDependencies): 
     ok: true,
     host: config.daemon.host,
     port: config.daemon.port,
-    aliases: Object.keys(config.aliases).length
+    models: Object.keys(config.models).length
   }));
 
   app.get("/v1/models", async () => ({
     object: "list",
-    data: Object.entries(config.aliases).map(([id, route]) => ({
+    data: Object.entries(config.models).map(([id, route]) => ({
       id,
       object: "model",
       created: 0,
-      owned_by: route.primary.provider
+      owned_by: route.providers[0]?.provider
     }))
   }));
 

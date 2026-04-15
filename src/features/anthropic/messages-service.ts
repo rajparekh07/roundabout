@@ -1,5 +1,5 @@
 import type { FeatureService, StreamFeatureService } from "../../core/contracts.js";
-import { AliasResolver } from "../../core/alias-resolver.js";
+import { ModelResolver } from "../../core/model-resolver.js";
 import { FallbackExecutor } from "../../core/fallback-executor.js";
 import { ProviderRegistry } from "../../core/provider-registry.js";
 import type { AnthropicMessageResponse, AnthropicStreamEvent } from "../../types.js";
@@ -12,18 +12,14 @@ export class AnthropicMessagesService
     StreamFeatureService<AnthropicMessageCommand, AnthropicStreamEvent>
 {
   constructor(
-    private readonly aliases: AliasResolver,
+    private readonly models: ModelResolver,
     private readonly fallback: FallbackExecutor,
     private readonly providers: ProviderRegistry
   ) {}
 
   async execute(command: AnthropicMessageCommand): Promise<AnthropicMessageResponse> {
-    const resolved = this.aliases.resolveAnthropicModel(command.model, "chat");
-    if (resolved.kind === "direct") {
-      return this.providers.getAnthropicGateway(resolved.provider).messages(command);
-    }
-
-    return this.fallback.execute(resolved.targets, async (target) => {
+    const targets = this.models.resolveRequired(command.model, "chat");
+    return this.fallback.execute(targets, async (target) => {
       if (this.providers.supportsAnthropicNative(target.provider)) {
         return this.providers.getAnthropicGateway(target.provider).messages({
           ...command,
@@ -39,13 +35,8 @@ export class AnthropicMessagesService
   }
 
   async *stream(command: AnthropicMessageCommand): AsyncGenerator<AnthropicStreamEvent> {
-    const resolved = this.aliases.resolveAnthropicModel(command.model, "chat");
-    if (resolved.kind === "direct") {
-      yield* this.providers.getAnthropicGateway(resolved.provider).streamMessages(command);
-      return;
-    }
-
-    const stream = await this.fallback.execute(resolved.targets, async (target) => {
+    const targets = this.models.resolveRequired(command.model, "chat");
+    const stream = await this.fallback.execute(targets, async (target) => {
       if (this.providers.supportsAnthropicNative(target.provider)) {
         return this.providers.getAnthropicGateway(target.provider).streamMessages({
           ...command,

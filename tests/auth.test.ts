@@ -6,7 +6,7 @@ import type { RoundaboutConfig } from "../src/types.js";
 const config: RoundaboutConfig = {
   daemon: { host: "127.0.0.1", port: 4317 },
   providers: {},
-  aliases: {},
+  models: {},
   tokens: {
     app: {
       token: "rb_secret",

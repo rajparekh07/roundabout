@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 
 import { configSchema } from "./schema.js";
 import type {
-  AliasRoute,
+  ModelRoute,
   ProviderName,
   ProviderSettings,
   ProjectToken,
@@ -17,7 +17,7 @@ const DEFAULT_CONFIG: RoundaboutConfig = {
     port: 4317
   },
   providers: {},
-  aliases: {},
+  models: {},
   tokens: {}
 };
 
@@ -55,8 +55,8 @@ export function upsertProvider(
   config.providers[provider] = settings;
 }
 
-export function upsertAlias(config: RoundaboutConfig, alias: string, route: AliasRoute) {
-  config.aliases[alias] = route;
+export function upsertModel(config: RoundaboutConfig, modelKey: string, route: ModelRoute) {
+  config.models[modelKey] = route;
 }
 
 export function upsertToken(config: RoundaboutConfig, name: string, tokenValue: string) {

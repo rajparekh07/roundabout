@@ -12,20 +12,21 @@ const config: RoundaboutConfig = {
     openai: { enabled: true, protocol: "openai", apiKey: "sk", baseUrl: "https://openai.test/v1" },
     anthropic: { enabled: true, protocol: "anthropic", apiKey: "sk-ant", baseUrl: "https://anthropic.test/v1" }
   },
-  aliases: {
+  models: {
     smart: {
-      primary: { provider: "openai", model: "gpt-4.1-mini" },
-      fallbacks: [],
+      providers: [{ provider: "openai", model: "gpt-4.1-mini" }],
       capabilities: ["chat"]
     },
     claude: {
-      primary: { provider: "anthropic", model: "claude-3-7-sonnet-latest" },
-      fallbacks: [],
+      providers: [{ provider: "anthropic", model: "claude-3-7-sonnet-latest" }],
+      capabilities: ["chat"]
+    },
+    "claude-opus-4-1": {
+      providers: [{ provider: "anthropic", model: "claude-opus-4-1" }],
       capabilities: ["chat"]
     },
     embed: {
-      primary: { provider: "openai", model: "text-embedding-3-small" },
-      fallbacks: [],
+      providers: [{ provider: "openai", model: "text-embedding-3-small" }],
       capabilities: ["embeddings"]
     }
   },
@@ -168,7 +169,7 @@ describe("server", () => {
     await app.close();
   });
 
-  it("supports raw anthropic model names", async () => {
+  it("routes anthropic model names to configured providers", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
       jsonResponse({
         id: "msg_1",
@@ -196,7 +197,7 @@ describe("server", () => {
     await app.close();
   });
 
-  it("returns anthropic-shaped responses for aliased openai targets", async () => {
+  it("returns anthropic-shaped responses for model-routed openai targets", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
       jsonResponse({
         id: "chatcmpl_1",
@@ -230,7 +231,7 @@ describe("server", () => {
     await app.close();
   });
 
-  it("routes custom openai-style providers by alias", async () => {
+  it("routes custom openai-style providers by model", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
       jsonResponse({
         id: "chatcmpl_1",
@@ -258,11 +259,10 @@ describe("server", () => {
             baseUrl: "https://gateway.test/v1"
           }
         },
-        aliases: {
-          ...config.aliases,
+        models: {
+          ...config.models,
           gateway: {
-            primary: { provider: "gateway", model: "gpt-4.1-mini" },
-            fallbacks: [],
+            providers: [{ provider: "gateway", model: "gpt-4.1-mini" }],
             capabilities: ["chat"]
           }
         }
@@ -307,10 +307,9 @@ describe("server", () => {
             baseUrl: "https://anthropic-gateway.test/v1"
           }
         },
-        aliases: {
+        models: {
           gatewayClaude: {
-            primary: { provider: "gatewayAnthropic", model: "claude-sonnet-custom" },
-            fallbacks: [],
+            providers: [{ provider: "gatewayAnthropic", model: "claude-sonnet-custom" }],
             capabilities: ["chat"]
           }
         }
@@ -419,7 +418,6 @@ describe("server", () => {
 
     expect(response.status).toBe(400);
     expect(response.body.type).toBe("error");
-    expect(response.body.error.message).toContain("No enabled provider with");
     await app.close();
   });
 

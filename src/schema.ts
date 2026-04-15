@@ -24,14 +24,13 @@ const rawProviderSettingsSchema = z
 
 export const providerSettingsSchema = rawProviderSettingsSchema;
 
-export const routeTargetSchema = z.object({
+export const modelProviderRouteSchema = z.object({
   provider: z.string().min(1),
-  model: z.string().min(1)
+  model: z.string().min(1).optional()
 });
 
-export const aliasRouteSchema = z.object({
-  primary: routeTargetSchema,
-  fallbacks: z.array(routeTargetSchema).default([]),
+export const modelRouteSchema = z.object({
+  providers: z.array(modelProviderRouteSchema).min(1),
   capabilities: z.array(z.enum(["chat", "embeddings"])).min(1)
 });
 
@@ -41,10 +40,10 @@ export const projectTokenSchema = z.object({
   updatedAt: z.string().datetime()
 });
 
-export const configSchema = z.object({
+export const configSchema = z.strictObject({
   daemon: daemonSchema.default({ host: "127.0.0.1", port: 4317 }),
   providers: z.record(z.string(), rawProviderSettingsSchema).default({}),
-  aliases: z.record(z.string(), aliasRouteSchema).default({}),
+  models: z.record(z.string(), modelRouteSchema).default({}),
   tokens: z.record(z.string(), projectTokenSchema).default({})
 });
 
