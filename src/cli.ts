@@ -1,12 +1,15 @@
+import pc from "picocolors";
 import { Command } from "commander";
 import { confirm, input, password, select } from "@inquirer/prompts";
 
 import { buildCliDependencies } from "./bootstrap/build-cli.js";
 import { createDebugLogger } from "./debug.js";
+import { blank, dim, heading, label, success, table, value, warning } from "./output.js";
 import { getProviderLabel } from "./providers/metadata.js";
 import type { ProviderDescriptorRegistry } from "./providers/provider-descriptor.js";
 import { startServerWithDependencies } from "./server.js";
 import { generateToken } from "./token.js";
+import { getVersion } from "./version.js";
 import type { CliDependencies } from "./core/contracts.js";
 import type { ModelRoute, ProviderCapability, ProviderName, ProviderProtocol, RoundaboutConfig } from "./types.js";
 
@@ -16,7 +19,7 @@ export function createCli() {
   program
     .name("roundabout")
     .description("Local OpenAI-compatible LLM proxy")
-    .version("1.0.0");
+    .version(getVersion());
 
   program
     .command("setup")
@@ -27,7 +30,10 @@ export function createCli() {
       const config = await dependencies.configurationService.load();
       const updated = await runSetupWizard(config, dependencies);
       await dependencies.configurationService.save(updated);
-      console.log(`Wrote config to ${dependencies.configurationService.getPath()}`);
+      blank();
+      success("Config updated");
+      label("Config", dependencies.configurationService.getPath());
+      blank();
     });
 
   program
@@ -40,13 +46,43 @@ export function createCli() {
       const logger = createDebugLogger(Boolean(options.debug));
       const serverDependencies = await dependencies.startDependencies(logger);
       const app = await startServerWithDependencies(serverDependencies);
+      const config = serverDependencies.config;
 
-      console.log(
-        `roundabout listening on http://${serverDependencies.config.daemon.host}:${serverDependencies.config.daemon.port}`
-      );
+      blank();
+      heading(`roundabout v${getVersion()}`);
+      blank();
+      label("Daemon", `http://${config.daemon.host}:${config.daemon.port}`);
       if (options.debug) {
-        console.log("debug logging enabled");
+        label("Debug", "enabled");
       }
+      blank();
+
+      const enabledProviders = Object.entries(config.providers).filter(([, settings]) => settings.enabled);
+      if (enabledProviders.length > 0) {
+        heading("Providers");
+        table(
+          ["Name", "Protocol"],
+          enabledProviders.map(([name, settings]) => [name, settings.protocol])
+        );
+        blank();
+      }
+
+      const modelEntries = Object.entries(config.models);
+      if (modelEntries.length > 0) {
+        heading("Models");
+        table(
+          ["Alias", "Provider", "Model"],
+          modelEntries.map(([alias, route]) => [
+            alias,
+            route.providers[0]?.provider ?? "-",
+            route.providers[0]?.model ?? "-"
+          ])
+        );
+        blank();
+      }
+
+      success("Ready");
+      blank();
 
       for (const signal of ["SIGINT", "SIGTERM"] as const) {
         process.on(signal, async () => {
@@ -65,8 +101,17 @@ export function createCli() {
     .option("--config <path>", "Override config path")
     .action(async (project, options) => {
       const dependencies = await buildCliDependencies(options.config);
-      const value = await dependencies.tokenAdminService.create(project);
-      console.log(`${project}: ${value}`);
+      const tokenValue = await dependencies.tokenAdminService.create(project);
+
+      blank();
+      success(`Created token for ${project}`);
+      blank();
+      value(tokenValue);
+      blank();
+      dim("Use it as:");
+      dim("  Authorization: Bearer <token>");
+      dim("  x-api-key: <token>");
+      blank();
     });
 
   token
@@ -76,8 +121,38 @@ export function createCli() {
     .option("--config <path>", "Override config path")
     .action(async (project, options) => {
       const dependencies = await buildCliDependencies(options.config);
-      const value = await dependencies.tokenAdminService.rotate(project);
-      console.log(`${project}: ${value}`);
+      const tokenValue = await dependencies.tokenAdminService.rotate(project);
+
+      blank();
+      success(`Rotated token for ${project}`);
+      blank();
+      value(tokenValue);
+      blank();
+      warning("Previous token is no longer valid.");
+      blank();
+    });
+
+  token
+    .command("show")
+    .description("Show the full token for a project")
+    .argument("<project>", "Project name")
+    .option("--config <path>", "Override config path")
+    .action(async (project, options) => {
+      const dependencies = await buildCliDependencies(options.config);
+      const tokenValue = await dependencies.tokenAdminService.get(project);
+
+      if (!tokenValue) {
+        blank();
+        warning(`No token found for ${project}`);
+        blank();
+        return;
+      }
+
+      blank();
+      success(`Token for ${project}`);
+      blank();
+      value(tokenValue);
+      blank();
     });
 
   token
@@ -87,7 +162,13 @@ export function createCli() {
     .action(async (options) => {
       const dependencies = await buildCliDependencies(options.config);
       const rows = await dependencies.tokenAdminService.list();
-      console.table(rows);
+
+      blank();
+      table(
+        ["Project", "Token", "Updated"],
+        rows.map((row) => [row.project, row.tokenPreview, row.updatedAt.slice(0, 10)])
+      );
+      blank();
     });
 
   program
@@ -96,7 +177,34 @@ export function createCli() {
     .option("--config <path>", "Override config path")
     .action(async (options) => {
       const dependencies = await buildCliDependencies(options.config);
-      console.log(JSON.stringify(await dependencies.statusService.summary(), null, 2));
+      const summary = await dependencies.statusService.summary();
+      const healthColor =
+        summary.health === "running" ? pc.green : summary.health === "unreachable" ? pc.yellow : pc.red;
+
+      blank();
+      label("Config", summary.configPath);
+      label("Daemon", summary.daemon);
+      label("Health", healthColor(summary.health));
+      blank();
+
+      if (summary.providers.length > 0) {
+        heading("Providers");
+        table(
+          ["Name", "Status"],
+          summary.providers.map((provider) => [
+            provider.provider,
+            {
+              text: provider.enabled ? "enabled" : "disabled",
+              color: provider.enabled ? pc.green : pc.dim
+            }
+          ])
+        );
+        blank();
+      }
+
+      label("Models", String(summary.modelCount));
+      label("Tokens", String(summary.tokenCount));
+      blank();
     });
 
   return program;

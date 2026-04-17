@@ -96,6 +96,7 @@ export interface CliDependencies {
     create(project: string): Promise<string>;
     rotate(project: string): Promise<string>;
     list(): Promise<Array<{ project: string; updatedAt: string; tokenPreview: string }>>;
+    get(project: string): Promise<string | null>;
   };
   statusService: {
     summary(): Promise<{

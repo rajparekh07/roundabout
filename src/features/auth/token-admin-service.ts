@@ -30,4 +30,13 @@ export class TokenAdminService {
       tokenPreview: `${tokenEntry.token.slice(0, 10)}...`
     }));
   }
+
+  async get(project: string) {
+    const config = await this.repository.load();
+    const entry = config.tokens[project];
+    if (!entry) {
+      return null;
+    }
+    return entry.token;
+  }
 }
